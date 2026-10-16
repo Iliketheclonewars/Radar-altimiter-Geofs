@@ -1,0 +1,170 @@
+// ==UserScript==
+// @name         GeoFS F/A-18 Radar Altimeter
+// @namespace    https://www.geo-fs.com/
+// @version      3.0
+// @description  F/A-18 style radar altimeter with warnings
+// @match        https://www.geo-fs.com/*
+// @grant        none
+// ==/UserScript==
+
+(function () {
+'use strict';
+
+let display;
+let raltVisible = true;
+
+let flash = false;
+let lastFlashTime = 0;
+
+
+function createDisplay() {
+
+    display = document.createElement("div");
+
+    display.style.position = "fixed";
+    display.style.top = "20px";
+    display.style.right = "20px";
+    display.style.background = "rgba(0,0,0,0.75)";
+    display.style.color = "#00ff00";
+    display.style.fontFamily = "monospace";
+    display.style.fontSize = "24px";
+    display.style.fontWeight = "bold";
+    display.style.padding = "10px";
+    display.style.border = "2px solid #00ff00";
+    display.style.zIndex = "999999";
+    display.style.textAlign = "center";
+
+    display.innerHTML = "RALT<br>WAITING";
+
+    document.body.appendChild(display);
+}
+
+
+function update() {
+
+    try {
+
+        if (!geofs.aircraft ||
+            !geofs.aircraft.instance ||
+            !geofs.aircraft.instance.llaLocation) {
+
+            requestAnimationFrame(update);
+            return;
+        }
+
+
+        let aircraft = geofs.aircraft.instance;
+
+
+        // GeoFS altitude data
+        let altitude = aircraft.llaLocation[2];
+        let ground = geofs.groundElevation;
+
+
+        // Convert meters to feet
+        let radarAlt = Math.round(
+            (altitude - ground) * 3.28084
+        );
+
+
+        radarAlt = Math.max(0, radarAlt);
+
+
+        let warning = "";
+        let color = "#00ff00";
+
+
+        // Warning logic
+        if (radarAlt <= 10) {
+
+            warning = "LANDING";
+            color = "#00ff00";
+
+
+        } else if (radarAlt <= 20) {
+
+            warning = "FLARE";
+            color = "yellow";
+
+
+        } else if (radarAlt <= 50) {
+
+            let now = Date.now();
+
+            if (now - lastFlashTime >= 1000) {
+                flash = !flash;
+                lastFlashTime = now;
+            }
+
+            warning = flash ? "WARNING" : "";
+            color = "red";
+
+
+        } else if (radarAlt <= 100) {
+
+            warning = "LOW ALT";
+            color = "red";
+
+
+        } else if (radarAlt <= 500) {
+
+            warning = "CAUTION";
+            color = "yellow";
+
+        }
+
+
+        display.style.color = color;
+        display.style.borderColor = color;
+
+
+        display.innerHTML =
+            "RALT<br>" +
+            radarAlt +
+            " FT" +
+            (warning ? "<br>" + warning : "");
+
+
+    } catch (error) {
+
+        console.log(error);
+
+    }
+
+
+    requestAnimationFrame(update);
+}
+
+
+// Toggle display with '
+document.addEventListener("keydown", function(event) {
+
+    if (event.key === "'") {
+
+        raltVisible = !raltVisible;
+
+        display.style.display =
+            raltVisible ? "block" : "none";
+
+    }
+
+});
+
+
+// Wait for GeoFS to load
+let wait = setInterval(() => {
+
+    if (window.geofs && document.body) {
+
+        clearInterval(wait);
+
+        createDisplay();
+
+        update();
+
+    }
+
+}, 500);
+
+
+})();
